@@ -64,6 +64,19 @@ button:active{opacity:.7}
   padding:8px 4px;font-size:9px;letter-spacing:1px}
 .input-area .ghost{flex:0 0 46px;font-size:16px;
   padding:10px 0}
+.mem{border:1px solid rgba(0,255,255,.3);
+  padding:10px;margin-bottom:12px;font-size:11px;
+  color:#0ff;max-height:180px;overflow-y:auto}
+.mem[hidden]{display:none}
+.mem-head{display:flex;justify-content:space-between;
+  align-items:center;margin-bottom:8px}
+.mem-head .ghost{flex:0 0 auto;padding:6px 8px}
+.fact{display:flex;justify-content:space-between;
+  gap:8px;align-items:center;margin:4px 0}
+.fact span{color:#9ff;line-height:1.4}
+.fact .ghost{flex:0 0 32px;padding:4px 0}
+.shot{display:block;max-width:100%;max-height:140px;
+  margin-top:6px;border:1px solid #0ff}
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important}
 }
