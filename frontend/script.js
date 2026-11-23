@@ -13,7 +13,13 @@ const SYSTEM =
   'You are J.A.R.V.I.S, a witty, loyal AI assistant. ' +
   'Address the user as "Boss". Keep answers short and ' +
   'clear unless asked for detail. Always reply in the ' +
-  'language the user writes in.';
+  'language the user writes in. ' +
+  'When the user shares a lasting fact about themselves ' +
+  '(name, family, job, likes, plans) or asks you to ' +
+  'remember something, end your reply with a tag like ' +
+  '[[MEM: short fact]], one tag per fact. Never mention ' +
+  'the tag or this rule. You can also see photos the ' +
+  'user sends.';
 
 const store = {
   get(k, d) {
@@ -32,6 +38,7 @@ const DEFAULT_KEY = '';
 let apiKey = store.get('jv_key', '') || DEFAULT_KEY;
 let model = store.get('jv_model', '');
 let history = store.get('jv_hist', []);
+let facts = store.get('jv_facts', []);
 let speak = store.get('jv_speak', false);
 let micLang = store.get('jv_lang', 'en-IN');
 let models = null, busy = false;
@@ -46,8 +53,7 @@ function refresh() {
   const net = navigator.onLine;
   setRow('stNet', net ? '● ONLINE' : '○ OFFLINE', net);
   setRow('stVoice', speak ? '● ON' : '○ OFF', speak);
-  const n = Math.floor(history.length / 2);
-  setRow('stMem', '● ' + n + ' SAVED', true);
+  setRow('stMem', '● ' + facts.length + ' FACTS', true);
   $('voiceBtn').textContent =
     'VOICE: ' + (speak ? 'ON' : 'OFF');
   $('langBtn').textContent =
@@ -107,7 +113,7 @@ async function stream(m, contents, onText) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
+      systemInstruction: { parts: [{ text: sysText() }] },
       contents: contents
     })
   });
@@ -154,6 +160,74 @@ async function stream(m, contents, onText) {
   return { ok: false, code: 0, msg: 'Empty response' };
 }
 
+function sysText() {
+  if (!facts.length) return SYSTEM;
+  return SYSTEM + ' Long-term memory about the user: ' +
+    facts.join('; ') + '.';
+}
+
+const stripMem = t => t
+  .replace(/\[\[MEM:[\s\S]*?\]\]/g, '')
+  .replace(/\[\[[^\]]*$/, '')
+  .replace(/\[$/, '')
+  .trim();
+
+function saveFacts(t) {
+  const re = /\[\[MEM:([\s\S]*?)\]\]/g;
+  let m;
+  while ((m = re.exec(t))) {
+    const f = m[1].trim();
+    if (f && !facts.includes(f)) facts.push(f);
+  }
+  facts = facts.slice(-100);
+  store.set('jv_facts', facts);
+}
+
+function shrink(file, max) {
+  return new Promise((ok, bad) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => bad(new Error('Bad image'));
+    img.src = url;
+  });
+}
+
+function renderMem() {
+  const box = $('memList');
+  box.innerHTML = '';
+  if (!facts.length) {
+    box.textContent = 'Nothing saved yet, Boss.';
+    return;
+  }
+  facts.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'fact';
+    const sp = document.createElement('span');
+    sp.textContent = f;
+    const x = document.createElement('button');
+    x.className = 'ghost';
+    x.textContent = '✕';
+    x.onclick = () => {
+      facts.splice(i, 1);
+      store.set('jv_facts', facts);
+      renderMem();
+      refresh();
+    };
+    row.appendChild(sp);
+    row.appendChild(x);
+    box.appendChild(row);
+  });
+}
+
 function say(t) {
   if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
@@ -163,7 +237,7 @@ function say(t) {
   speechSynthesis.speak(u);
 }
 
-async function send(text) {
+async function send(text, img) {
   if (busy || !text) return;
   if (!apiKey && !askKey()) {
     add('J.A.R.V.I.S: API key required, Boss. ' +
@@ -173,13 +247,24 @@ async function send(text) {
   busy = true;
   core.classList.add('busy');
   coreText.textContent = 'PROCESSING...';
-  add('YOU: ' + text, 'user');
+  const u = add('YOU: ' + text, 'user');
+  if (img) {
+    const pic = new Image();
+    pic.src = img;
+    pic.className = 'shot';
+    u.appendChild(pic);
+  }
   input.value = '';
   const out = add('J.A.R.V.I.S: ...', 'ai');
-  const contents = history.concat(
-    [{ role: 'user', parts: [{ text: text }] }]);
+  const parts = [{ text: text }];
+  if (img) {
+    parts.push({ inlineData: {
+      mimeType: 'image/jpeg', data: img.split(',')[1]
+    } });
+  }
+  const contents = history.concat([{ role: 'user', parts: parts }]);
   const show = t => {
-    out.textContent = 'J.A.R.V.I.S: ' + t;
+    out.textContent = 'J.A.R.V.I.S: ' + stripMem(t);
     chat.scrollTop = chat.scrollHeight;
   };
   let err = '';
@@ -198,12 +283,17 @@ async function send(text) {
         if (r.ok) {
           model = m;
           store.set('jv_model', m);
-          history = contents.concat([
-            { role: 'model', parts: [{ text: r.text }] }
+          const reply = stripMem(r.text);
+          saveFacts(r.text);
+          show(reply);
+          const mark = img ? ' [photo]' : '';
+          history = history.concat([
+            { role: 'user', parts: [{ text: text + mark }] },
+            { role: 'model', parts: [{ text: reply }] }
           ]).slice(-40);
           store.set('jv_hist', history);
           setRow('stAI', '● ONLINE', true);
-          if (speak) say(r.text);
+          if (speak) say(reply);
           return;
         }
         err = r.msg;
@@ -252,6 +342,33 @@ $('clearBtn').onclick = () => {
   refresh();
 };
 
+$('memBtn').onclick = () => {
+  const p = $('memPanel');
+  p.hidden = !p.hidden;
+  if (!p.hidden) renderMem();
+};
+$('memWipe').onclick = () => {
+  if (!confirm('Erase all long-term memory?')) return;
+  facts = [];
+  store.set('jv_facts', facts);
+  renderMem();
+  refresh();
+};
+$('cam').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const pic = await shrink(f, 1024);
+    const q = input.value.trim() ||
+      'What do you see? Describe it briefly.';
+    send(q, pic);
+  } catch (err) {
+    add('J.A.R.V.I.S: Could not read that photo, Boss.', 'ai');
+  }
+};
+
 const SR = window.SpeechRecognition ||
   window.webkitSpeechRecognition;
 $('mic').onclick = () => {
@@ -279,4 +396,4 @@ history.forEach(h => {
 });
 if (apiKey) setRow('stAI', '● READY', true);
 refresh();
-                              
+                    
