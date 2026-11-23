@@ -2,46 +2,56 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport"
+ content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only dark">
+<meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet"
+ href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
- <header><h1>J.A.R.V.I.S</h1><p>MOBILE EDITION</p></header>
+<header><h1>J.A.R.V.I.S</h1><p>MOBILE EDITION</p></header>
 
- <div class="core" id="core">
+<div class="core" id="core">
   <div class="ring r1"></div>
   <div class="ring r2"></div>
   <div class="center"></div>
- </div>
- <p class="core-text" id="coreText">CORE ACTIVE</p>
+</div>
+<p class="core-text" id="coreText">CORE ACTIVE</p>
 
- <div class="status">
+<div class="status">
   <h2>SYSTEM STATUS</h2>
-  <div class="row"><span>AI CORE</span><b id="stAI" class="off">○ STANDBY</b></div>
-  <div class="row"><span>NETWORK</span><b id="stNet" class="on">● ONLINE</b></div>
-  <div class="row"><span>VOICE</span><b id="stVoice" class="off">○ OFF</b></div>
-  <div class="row"><span>MEMORY</span><b id="stMem" class="on">● 0 SAVED</b></div>
- </div>
+  <div class="row"><span>AI CORE</span>
+    <b id="stAI" class="off">○ NO KEY</b></div>
+  <div class="row"><span>NETWORK</span>
+    <b id="stNet" class="on">● ONLINE</b></div>
+  <div class="row"><span>VOICE</span>
+    <b id="stVoice" class="off">○ OFF</b></div>
+  <div class="row"><span>MEMORY</span>
+    <b id="stMem" class="on">● 0 SAVED</b></div>
+</div>
 
- <div class="tools">
+<div class="tools">
   <button id="keyBtn" class="ghost">API KEY</button>
   <button id="voiceBtn" class="ghost">VOICE: OFF</button>
   <button id="langBtn" class="ghost">MIC: EN</button>
   <button id="clearBtn" class="ghost">CLEAR</button>
- </div>
+</div>
 
- <div class="chat" id="chat"></div>
+<div class="chat" id="chat"></div>
 
- <div class="input-area">
-  <input id="msg" placeholder="Ask J.A.R.V.I.S..." autocomplete="off">
-  <button id="mic" class="ghost" aria-label="Voice input">🎤</button>
+<div class="input-area">
+  <input id="msg" placeholder="Ask J.A.R.V.I.S..."
+    autocomplete="off">
+  <button id="mic" class="ghost">🎤</button>
   <button id="send">SEND</button>
- </div>
+</div>
 
- <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
+
