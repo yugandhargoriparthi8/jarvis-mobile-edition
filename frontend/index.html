@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,7 +40,16 @@
   <button id="keyBtn" class="ghost">API KEY</button>
   <button id="voiceBtn" class="ghost">VOICE: OFF</button>
   <button id="langBtn" class="ghost">MIC: EN</button>
+  <button id="memBtn" class="ghost">MEM</button>
   <button id="clearBtn" class="ghost">CLEAR</button>
+</div>
+
+<div class="mem" id="memPanel" hidden>
+  <div class="mem-head">
+    <b>LONG MEMORY</b>
+    <button id="memWipe" class="ghost">WIPE ALL</button>
+  </div>
+  <div id="memList"></div>
 </div>
 
 <div class="chat" id="chat"></div>
@@ -47,11 +57,14 @@
 <div class="input-area">
   <input id="msg" placeholder="Ask J.A.R.V.I.S..."
     autocomplete="off">
+  <button id="cam" class="ghost">📷</button>
   <button id="mic" class="ghost">🎤</button>
   <button id="send">SEND</button>
 </div>
 
+<input type="file" id="file" accept="image/*"
+  capture="environment" hidden>
+
 <script src="script.js"></script>
 </body>
 </html>
-
