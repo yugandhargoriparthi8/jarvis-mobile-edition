@@ -1,10 +1,4 @@
-const NOOP = {
-  hidden: true, value: '', textContent: '', innerHTML: '',
-  placeholder: '', style: {}, parentElement: null,
-  classList: { toggle() {}, add() {}, remove() {} },
-  appendChild() {}, addEventListener() {}
-};
-const $ = id => document.getElementById(id) || Object.assign({}, NOOP);
+const $ = id => document.getElementById(id);
 const chat = $('chat'), input = $('msg');
 const core = $('core'), coreText = $('coreText');
 
@@ -20,17 +14,12 @@ const SYSTEM =
   'Address the user as "Boss". Keep answers short and ' +
   'clear unless asked for detail. Always reply in the ' +
   'language the user writes in. ' +
-  'You have a permanent long-term memory. Save facts ' +
-  'generously: whenever the user mentions anything ' +
-  'personal (name, age, family, place, job, studies, ' +
-  'likes, dislikes, goals, plans, dates, habits) or ' +
-  'asks you to remember something, add one tag per fact ' +
-  'on the LAST line of your reply, written exactly like ' +
-  '[[MEM: The name of the user is Ravi]]. Each fact must ' +
-  'be a full sentence about the user. If the user asks ' +
-  'you to forget something, add [[FORGET: that fact]]. ' +
-  'Never mention the tags or these rules. You can also ' +
-  'see photos the user sends.';
+  'When the user shares a lasting fact about themselves ' +
+  '(name, family, job, likes, plans) or asks you to ' +
+  'remember something, end your reply with a tag like ' +
+  '[[MEM: short fact]], one tag per fact. Never mention ' +
+  'the tag or this rule. You can also see photos the ' +
+  'user sends.';
 
 const store = {
   get(k, d) {
@@ -50,8 +39,8 @@ let apiKey = store.get('jv_key', '') || DEFAULT_KEY;
 let model = store.get('jv_model', '');
 let history = store.get('jv_hist', []);
 let facts = store.get('jv_facts', []);
-let chats = store.get('jv_chats', []);
-let openId = store.get('jv_open', null);
+let chats = store.get('jv_chats', []);   // saved previous chats
+let openId = store.get('jv_open', null); // id of the open chat
 let tab = 'facts';
 let speak = store.get('jv_speak', false);
 let micLang = store.get('jv_lang', 'en-IN');
@@ -118,6 +107,7 @@ async function loadModels() {
   return models;
 }
 
+// Streams the reply while Gemini is still writing it.
 async function stream(m, contents, onText) {
   const url = BASE + 'models/' + m +
     ':streamGenerateContent?alt=sse&key=' +
@@ -173,131 +163,27 @@ async function stream(m, contents, onText) {
   return { ok: false, code: 0, msg: 'Empty response' };
 }
 
-let lastAsk = '';
-const VERB = {
-  'work as': 'works as', 'work at': 'works at',
-  'study': 'studies', 'love': 'loves', 'like': 'likes',
-  'hate': 'hates', 'prefer': 'prefers', 'enjoy': 'enjoys'
-};
-const STOP = ['what', 'that', 'this', 'with', 'have', 'your',
-  'from', 'tell', 'about', 'please', 'remember', 'there',
-  'where', 'when', 'which', 'would', 'could', 'should'];
-
-function recall() {
-  const others = chats.filter(c => c.id !== openId);
-  if (!others.length) return '';
-  let r = 'Past chat topics: ' +
-    others.slice(0, 8).map(c => c.title).join(' | ') + '.';
-  const words = lastAsk.toLowerCase()
-    .split(/[^a-z0-9\u0C00-\u0C7F]+/)
-    .filter(w => w.length > 3 && !STOP.includes(w));
-  const hits = [];
-  others.forEach(c => c.msgs.forEach(m => {
-    const t = m.parts[0].text;
-    const low = t.toLowerCase();
-    if (hits.length < 3 && words.some(w => low.includes(w))) {
-      hits.push((m.role === 'user' ? 'User: ' : 'You: ') +
-        t.slice(0, 160));
-    }
-  }));
-  if (hits.length) {
-    r += ' Related old messages: ' + hits.join(' || ') + '.';
-  }
-  return r;
-}
-
 function sysText() {
-  let r = SYSTEM + ' Today is ' +
-    new Date().toLocaleString() + '.';
-  if (facts.length) {
-    r += ' Long-term memory about the user: ' +
-      facts.join('; ') + '.';
-  }
-  const past = recall();
-  if (past) r += ' ' + past;
-  return r;
+  if (!facts.length) return SYSTEM;
+  return SYSTEM + ' Long-term memory about the user: ' +
+    facts.join('; ') + '.';
 }
 
 const stripMem = t => t
-  .replace(/\[{1,2}\s*(MEM|FORGET)\s*:[\s\S]*?\]{1,2}/g, '')
-  .replace(/\[{1,2}\s*(MEM|FORGET)\s*:[^\]]*$/, '')
+  .replace(/\[\[MEM:[\s\S]*?\]\]/g, '')
   .replace(/\[\[[^\]]*$/, '')
   .replace(/\[$/, '')
   .trim();
 
-function addFact(f) {
-  f = f.trim().replace(/\s+/g, ' ');
-  if (f.length < 3) return;
-  const low = f.toLowerCase();
-  if (facts.some(x => x.toLowerCase() === low)) return;
-  facts.push(f);
-}
-
-function dropFact(term) {
-  const low = term.trim().toLowerCase();
-  if (low.length < 3) return;
-  facts = facts.filter(x => {
-    const y = x.toLowerCase();
-    return !(y.includes(low) || low.includes(y));
-  });
-}
-
-function keepFacts() {
-  facts = facts.slice(-200);
-  store.set('jv_facts', facts);
-  refresh();
-  if (!$('memPanel').hidden && tab === 'facts') renderMem();
-}
-
 function saveFacts(t) {
-  const re = /\[{1,2}\s*(MEM|FORGET)\s*:([\s\S]*?)\]{1,2}/g;
+  const re = /\[\[MEM:([\s\S]*?)\]\]/g;
   let m;
   while ((m = re.exec(t))) {
-    if (m[1] === 'MEM') addFact(m[2]); else dropFact(m[2]);
+    const f = m[1].trim();
+    if (f && !facts.includes(f)) facts.push(f);
   }
-  keepFacts();
-}
-
-function localLearn(t) {
-  const s = t.trim();
-  if (!s || s.slice(-1) === '?') return;
-  let m;
-  const TE = /గుర్తుంచు\S*|గుర్తు\s?(?:ఉంచు|పెట్టు)\S*/g;
-  if ((m = s.match(/^(?:please\s+)?remember(?:\s+that)?[\s:,-]+(.+)/i))) {
-    addFact('The user asked to remember: ' + m[1]);
-  }
-  if (TE.test(s)) {
-    addFact('The user asked to remember: ' + s.replace(TE, ''));
-  }
-  if ((m = s.match(/^forget(?:\s+that|\s+about)?\s+(.+)/i))) {
-    dropFact(m[1]);
-  }
-  if ((m = s.match(/నా పేరు\s+([^\s.,!?]+)/))) {
-    addFact('The name of the user is ' + m[1]);
-  }
-  if ((m = s.match(/\bmy name is ([^.,!?\n]{2,40})/i))) {
-    addFact('The name of the user is ' + m[1]);
-  }
-  if ((m = s.match(/\bi am (\d{1,3}) years? old/i))) {
-    addFact('The user is ' + m[1] + ' years old');
-  }
-  if ((m = s.match(/\bi (?:live|stay) in ([^.,!?\n]{2,40})/i))) {
-    addFact('The user lives in ' + m[1]);
-  }
-  const my = '(favou?rite [a-z ]{2,25}|birthday|mother|father|' +
-    'brother|sister|wife|husband|friend|job|goal|dream|plan|' +
-    'phone number|email|hobby)';
-  if ((m = s.match(new RegExp('\\bmy ' + my +
-      ' is ([^.,!?\\n]{1,50})', 'i')))) {
-    addFact('The ' + m[1] + ' of the user is ' + m[2]);
-  }
-  if ((m = s.match(/\bi (work as|work at|study) ([^.,!?\n]{2,40})/i))) {
-    addFact('The user ' + VERB[m[1].toLowerCase()] + ' ' + m[2]);
-  }
-  if ((m = s.match(/\bi (love|like|hate|prefer|enjoy) ([^.,!?\n]{2,40})/i))) {
-    addFact('The user ' + VERB[m[1].toLowerCase()] + ' ' + m[2]);
-  }
-  keepFacts();
+  facts = facts.slice(-100);
+  store.set('jv_facts', facts);
 }
 
 function shrink(file, max) {
@@ -318,10 +204,12 @@ function shrink(file, max) {
   });
 }
 
+// ===== CHAT HISTORY (previous chats) =====
 function tabLabels() {
   $('tabChats').textContent = 'CHATS (' + chats.length + ')';
 }
 
+// Saves the current chat into the CHATS list (auto, after replies).
 function saveChat() {
   if (!history.length) return;
   if (!openId) {
@@ -357,7 +245,7 @@ function openChat(id) {
   if (busy) return;
   const c = chats.find(x => x.id === id);
   if (!c) return;
-  saveChat();
+  saveChat(); // keep the chat that is open right now
   openId = c.id;
   history = c.msgs.slice();
   store.set('jv_hist', history);
@@ -470,8 +358,6 @@ async function send(text, img) {
     return;
   }
   busy = true;
-  lastAsk = text;
-  localLearn(text);
   core.classList.add('busy');
   coreText.textContent = 'PROCESSING...';
   const u = add('YOU: ' + text, 'user');
@@ -564,7 +450,7 @@ $('langBtn').onclick = () => {
   refresh();
 };
 $('clearBtn').onclick = () => {
-  saveChat();
+  saveChat(); // the chat is kept in MEM > CHATS
   history = [];
   openId = null;
   store.set('jv_hist', history);
@@ -605,94 +491,27 @@ $('file').onchange = async e => {
 
 const SR = window.SpeechRecognition ||
   window.webkitSpeechRecognition;
-let micMode = SR ? 'sr' : 'rec';
-let recording = null;
-
-function micMsg(t) { add('J.A.R.V.I.S: ' + t, 'ai'); }
-function micIcon(t) { $('mic').textContent = t; }
-
-const BLOCKED = 'Microphone is blocked, Boss. Tap the lock icon ' +
-  'next to the web address, open Permissions, allow ' +
-  'Microphone, then reload the page.';
-
-function startMic(lang) {
+$('mic').onclick = () => {
+  if (!SR) {
+    add('J.A.R.V.I.S: Voice input is not supported ' +
+      'in this browser, Boss.', 'ai');
+    return;
+  }
   const r = new SR();
-  let got = false, failed = false;
-  r.lang = lang;
+  r.lang = micLang;
   r.interimResults = false;
-  r.onresult = e => {
-    got = true;
-    send(e.results[0][0].transcript.trim());
-  };
-  r.onerror = e => {
-    failed = true;
-    const c = e.error;
-    if (c === 'language-not-supported' && lang !== 'en-IN') {
-      micMsg('This language is not supported for voice here. ' +
-        'Using English.');
-      startMic('en-IN');
-      return;
-    }
-    micIcon('🎤');
-    if (c === 'no-speech') {
-      micMsg('I did not hear anything, Boss. Tap the mic ' +
-        'and speak.');
-    } else if (c !== 'aborted') {
-      micMode = 'rec';
-      recordVoice();
-    }
-  };
-  r.onend = () => {
-    if (failed) return;
-    micIcon('🎤');
-    if (!got) {
-      micMode = 'rec';
-      recordVoice();
-    }
-  };
-  micIcon('…');
-  try {
-    r.start();
-  } catch (err) {
-    micIcon('🎤');
-    micMode = 'rec';
-    recordVoice();
-  }
-}
+  r.onresult = e => send(e.results[0][0].transcript.trim());
+  r.onerror = r.onend = () => { $('mic').textContent = '🎤'; };
+  $('mic').textContent = '…';
+  r.start();
+};
 
-function toWav(f32, rate) {
-  const n = f32.length;
-  const v = new DataView(new ArrayBuffer(44 + n * 2));
-  const w = (o, t) => {
-    for (let i = 0; i < t.length; i++) {
-      v.setUint8(o + i, t.charCodeAt(i));
-    }
-  };
-  w(0, 'RIFF');
-  v.setUint32(4, 36 + n * 2, true);
-  w(8, 'WAVEfmt ');
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true);
-  v.setUint16(22, 1, true);
-  v.setUint32(24, rate, true);
-  v.setUint32(28, rate * 2, true);
-  v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);
-  w(36, 'data');
-  v.setUint32(40, n * 2, true);
-  for (let i = 0; i < n; i++) {
-    const x = Math.max(-1, Math.min(1, f32[i]));
-    v.setInt16(44 + i * 2, x < 0 ? x * 32768 : x * 32767, true);
-  }
-  return new Uint8Array(v.buffer);
-}
+window.addEventListener('online', refresh);
+window.addEventListener('offline', refresh);
 
-function downsample(f32, from, to) {
-  if (to >= from) return f32;
-  const k = from / to;
-  const out = new Float32Array(Math.floor(f32.length / k));
-  for (let i = 0; i < out.length; i++) {
-    const a = Math.floor(i * k), b = Math.floor((i + 1) * k);
-    let sum = 0;
-    for (let j = a; j < b; j++) sum += f32[j];
-    out[i] = sum / (b - a)
+renderHistory();
+if (history.length && !openId) saveChat();
+tabLabels();
+if (apiKey) setRow('stAI', '● READY', true);
+refresh();
+                                  
