@@ -1,5 +1,10 @@
-
-const $ = id => document.getElementById(id);
+const NOOP = {
+  hidden: true, value: '', textContent: '', innerHTML: '',
+  placeholder: '', style: {}, parentElement: null,
+  classList: { toggle() {}, add() {}, remove() {} },
+  appendChild() {}, addEventListener() {}
+};
+const $ = id => document.getElementById(id) || Object.assign({}, NOOP);
 const chat = $('chat'), input = $('msg');
 const core = $('core'), coreText = $('coreText');
 
@@ -690,18 +695,4 @@ function downsample(f32, from, to) {
     const a = Math.floor(i * k), b = Math.floor((i + 1) * k);
     let sum = 0;
     for (let j = a; j < b; j++) sum += f32[j];
-    out[i] = sum / (b - a);
-  }
-  return out;
-}
-
-function toBase64(u8) {
-  let bin = '';
-  for (let i = 0; i < u8.length; i += 8192) {
-    bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-  }
-  return btoa(bin);
-}
-
-async function transcribe(b64) {
-  const bod
+    out[i] = sum / (b - a)
