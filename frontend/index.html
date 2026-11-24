@@ -45,11 +45,22 @@
 </div>
 
 <div class="mem" id="memPanel" hidden>
-  <div class="mem-head">
-    <b>LONG MEMORY</b>
-    <button id="memWipe" class="ghost">WIPE ALL</button>
+  <div class="tabs">
+    <button id="tabFacts" class="ghost tab-on">FACTS</button>
+    <button id="tabChats" class="ghost">CHATS</button>
   </div>
-  <div id="memList"></div>
+  <div id="factsBox">
+    <div class="mem-head">
+      <b>LONG MEMORY</b>
+      <button id="memWipe" class="ghost">WIPE ALL</button>
+    </div>
+    <div id="memList"></div>
+  </div>
+  <div id="chatsBox" hidden>
+    <input id="chatSearch" placeholder="Search chats..."
+      autocomplete="off">
+    <div id="chatList"></div>
+  </div>
 </div>
 
 <div class="chat" id="chat"></div>
